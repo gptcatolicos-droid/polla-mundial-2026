@@ -1005,24 +1005,29 @@ function ChatPage(){
       const g=allGroups.find(k=>text.toUpperCase().includes(k)||text.toLowerCase().includes(`grupo ${k.toLowerCase()}`))
       if(g) selectGroup(g)
       else addMsg('pele','Dime la letra del grupo (A-L) o haz clic en uno de los grupos de arriba 😄')
-    } else if(chatPhase==='score_input'||chatPhase==='stats'){
+    } else if(chatPhase==='score_input'||chatPhase==='stats'||chatPhase==='confirm'){
       const m=text.match(/(\d+)\s*[-–a]\s*(\d+)/i)
       if(m){
         setScoreForm({home:m[1],away:m[2],pen:''})
-        addMsg('pele',`Anotado — ${es(currentMatch?.team1)} ${m[1]} – ${m[2]} ${es(currentMatch?.team2)}. Confirma la tarjeta 👇`)
-        addMsg('pele','__CONFIRM__','confirm')
-        setChatPhase('confirm')
+        // Save directly — no intermediate confirm step via chat
+        setTimeout(async()=>{
+          if(!currentMatch||!activeAvatar) return
+          setSaving(true)
+          try{
+            const h=parseInt(m[1])||0, a=parseInt(m[2])||0
+            await api('/api/predictions','POST',{
+              avatarId:activeAvatar.id,matchId:currentMatch.id,home:h,away:a,penaltyWinner:null
+            })
+            setPredictions(p=>({...p,[currentMatch.id]:{score_home:h,score_away:a,penalty_winner:null}}))
+            setScoreForm({home:'',away:'',pen:''})
+            goToNextMatch()
+          }catch(e){ addMsg('pele','❌ Error: '+e.message) }
+          setSaving(false)
+        },0)
       } else if(/no s[eé]|ni idea|sugier|recomiend/i.test(text)){
         suggestScore()
       } else {
-        addMsg('pele','Dime el marcador así: "2-1" o "Colombia 2 Ecuador 0" 😄')
-      }
-    } else if(chatPhase==='confirm'){
-      if(/ok|confirm|sí|si|acepto|perfecto|correcto/i.test(text)){
-        confirmScore()
-      } else if(/edit|camb|no/i.test(text)){
-        addMsg('pele','Sin problema — dime el marcador correcto 🔢')
-        setChatPhase('score_input')
+        addMsg('pele','Dime el marcador así: "2-1" 😄')
       }
     }
   }
@@ -1073,9 +1078,9 @@ function ChatPage(){
         penaltyWinner:scoreForm.pen||null
       })
       setPredictions(p=>({...p,[currentMatch.id]:{score_home:h,score_away:a,penalty_winner:scoreForm.pen||null}}))
-      addMsg('pele',`✅ ¡Guardado! ${es(currentMatch.team1)} ${h} – ${a} ${es(currentMatch.team2)} 🎉`,'ok')
-      addMsg('pele','__EXTRA__','extra')
-      setChatPhase('extra')
+      setScoreForm({home:'',away:'',pen:''})
+      // Immediately advance — no Extra Points blocking
+      goToNextMatch()
     }catch(e){ addMsg('pele','❌ Error guardando: '+e.message) }
     setSaving(false)
   }
@@ -1103,10 +1108,11 @@ function ChatPage(){
     const nextIdx=currentMatchIdx+1
     if(nextIdx<groupMatches.length){
       const next=groupMatches[nextIdx]
-      addMsg('pele',`¡Vamos al siguiente! ⚽`)
+      const total=groupMatches.length
+      addMsg('pele',`✅ Guardado — partido ${nextIdx}/${total} del Grupo ${currentGroupKey}. Siguiente ⚽`,'ok')
       showMatchStats(next, nextIdx)
     } else {
-      // Group done
+      addMsg('pele',`🎉 ¡Grupo ${currentGroupKey} completado! (${groupMatches.length}/${groupMatches.length} partidos) — ¿Cuál grupo seguimos?`,'ok')
       addMsg('pele','__GROUP_DONE__','group_done')
       setChatPhase('group_select')
     }
@@ -1185,30 +1191,43 @@ function ChatPage(){
               </div>
             </div>
           )
-          if(msg.type==='stats'&&currentMatch) return(
-            <div key={msg.id} style={{width:'100%'}}>
-              <MatchStatsCard match={currentMatch} predictions={predictions}
-                scoreForm={scoreForm} setScoreForm={setScoreForm}
-                onSave={()=>{
-                  const h=parseInt(scoreForm.home), a=parseInt(scoreForm.away)
-                  if(isNaN(h)||isNaN(a)) return
-                  setScoreForm(p=>({...p}))
-                  addMsg('pele',`${es(currentMatch.team1)} ${h} – ${a} ${es(currentMatch.team2)}. Confirma la tarjeta 👇`)
-                  addMsg('pele','__CONFIRM__','confirm')
-                  setChatPhase('confirm')
-                }}
-                onSuggest={suggestScore}
-                saving={saving}/>
-            </div>
-          )
-          if(msg.type==='confirm'&&currentMatch) return(
-            <div key={msg.id} style={{width:'100%'}}>
-              <ConfirmCard match={currentMatch} home={scoreForm.home} away={scoreForm.away}
-                onOk={confirmScore} onEdit={()=>setChatPhase('score_input')}
-                saving={saving}
-                scoreForm={scoreForm} setScoreForm={setScoreForm}/>
-            </div>
-          )
+          if(msg.type==='stats'){
+            const isLatest=messages.filter(m=>m.type==='stats').slice(-1)[0]?.id===msg.id
+            if(!isLatest||!currentMatch){
+              // Old stats msg — just show a done chip
+              const pred=predictions[currentMatch?.id]
+              return pred?(
+                <div key={msg.id} className="chip chip-g" style={{fontSize:'10px',alignSelf:'flex-start',margin:'0 0 .25rem 0'}}>
+                  ✓ {es(currentMatch?.team1)} {pred.score_home} – {pred.score_away} {es(currentMatch?.team2)}
+                </div>
+              ):null
+            }
+            return(
+              <div key={msg.id} style={{width:'100%'}}>
+                <MatchStatsCard match={currentMatch} predictions={predictions}
+                  scoreForm={scoreForm} setScoreForm={setScoreForm}
+                  onSave={()=>{
+                    const h=parseInt(scoreForm.home), a=parseInt(scoreForm.away)
+                    if(isNaN(h)||isNaN(a)||scoreForm.home===''||scoreForm.away==='') return
+                    confirmScore()
+                  }}
+                  onSuggest={suggestScore}
+                  saving={saving}/>
+              </div>
+            )
+          }
+          if(msg.type==='confirm'){
+            const isLatest=messages.filter(m=>m.type==='confirm').slice(-1)[0]?.id===msg.id
+            if(!isLatest||!currentMatch) return null
+            return(
+              <div key={msg.id} style={{width:'100%'}}>
+                <ConfirmCard match={currentMatch} home={scoreForm.home} away={scoreForm.away}
+                  onOk={confirmScore} onEdit={()=>setChatPhase('score_input')}
+                  saving={saving}
+                  scoreForm={scoreForm} setScoreForm={setScoreForm}/>
+              </div>
+            )
+          }
           if(msg.type==='extra'&&currentMatch) return(
             <div key={msg.id} style={{width:'100%'}}>
               <ExtraPointsCard match={currentMatch} form={extraForm}
@@ -1216,9 +1235,21 @@ function ChatPage(){
             </div>
           )
           if(msg.type==='group_done') return(
-            <div key={msg.id} className="card-green" style={{padding:'1rem',borderRadius:'var(--r)',width:'100%'}}>
-              <div style={{fontWeight:700,color:'var(--green)',marginBottom:'.5rem'}}>🎉 ¡Grupo {currentGroupKey} completado!</div>
-              <div className="text-sm text-muted">Llevas {totalDone} partidos. ¿Seguimos con otro grupo? 👇</div>
+            <div key={msg.id} style={{width:'100%'}}>
+              <div className="group-grid">
+                {allGroups.filter(g=>g!==currentGroupKey).map(g=>{
+                  const done=doneCounts[g]>=6
+                  const GRPS={'A':'🇲🇽🇿🇦🇰🇷🇨🇿','B':'🇨🇦🇧🇦🇶🇦🇨🇭','C':'🇧🇷🇲🇦🇭🇹🏴󠁧󠁢󠁳󠁣󠁴󠁿','D':'🇺🇸🇵🇾🇦🇺🇹🇷','E':'🇩🇪🇨🇼🇨🇮🇪🇨','F':'🇳🇱🇯🇵🇸🇪🇹🇳','G':'🇧🇪🇪🇬🇮🇷🇳🇿','H':'🇪🇸🇨🇻🇸🇦🇺🇾','I':'🇫🇷🇸🇳🇮🇶🇳🇴','J':'🇦🇷🇩🇿🇦🇹🇯🇴','K':'🇵🇹🇨🇩🇺🇿🇨🇴','L':'🏴󠁧󠁢󠁥󠁮󠁧󠁿🇭🇷🇬🇭🇵🇦'}
+                  return(
+                    <div key={g} className={`grp-btn ${done?'grp-btn-done':''}`}
+                      onClick={()=>selectGroup(g)} style={{cursor:'pointer'}}>
+                      <div className={`grp-lbl ${done?'grp-lbl-g':''}`}>{done?'✓':''}{g}</div>
+                      <div className="grp-flags">{GRPS[g]}</div>
+                      <div className="grp-count">{doneCounts[g]||0}/6</div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )
           return(
