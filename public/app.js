@@ -554,20 +554,8 @@ function AvatarsPage(){
           <h2 style={{fontFamily:'Bebas Neue',fontSize:'1.5rem',marginBottom:'.5rem'}}>¡Avatar creado!</h2>
           <p className="text-muted text-sm mb2">Nickname: <strong className="text-gold">{payInfo.avatar.nickname}</strong></p>
           <div className="card-gold" style={{textAlign:'left',marginBottom:'1rem'}}>
-            <div style={{fontFamily:'Bebas Neue',fontSize:'1.1rem',color:'var(--gold)',marginBottom:'.5rem'}}>💳 Paga tu inscripción · U${payInfo.settings?.inscription_fee||20}</div>
-            <p className="text-sm text-muted mb1">El admin activará tu avatar al confirmar el pago:</p>
-            {payInfo.settings?.paypal&&(
-              <div style={{display:'flex',alignItems:'center',gap:'.5rem',padding:'.5rem 0',borderBottom:'1px solid var(--border)'}}>
-                <span style={{fontSize:'1.2rem'}}>💙</span>
-                <div><div style={{fontSize:'10px',color:'var(--ink3)'}}>PayPal</div><div style={{fontWeight:700}}>{payInfo.settings.paypal}</div></div>
-              </div>
-            )}
-            {payInfo.settings?.nequi&&(
-              <div style={{display:'flex',alignItems:'center',gap:'.5rem',padding:'.5rem 0'}}>
-                <span style={{fontSize:'1.2rem'}}>📱</span>
-                <div><div style={{fontSize:'10px',color:'var(--ink3)'}}>Nequi</div><div style={{fontWeight:700}}>{payInfo.settings.nequi}</div></div>
-              </div>
-            )}
+            <div style={{fontFamily:'Bebas Neue',fontSize:'1.1rem',color:'var(--gold)',marginBottom:'.5rem'}}>💳 Inscripción · U${payInfo.settings?.inscription_fee||20}</div>
+            <p className="text-sm text-muted">El administrador te contactará con las instrucciones de pago para activar tu avatar. Pronto estarás en la competencia 🏆</p>
           </div>
           <button className="btn btn-ink btn-full" onClick={()=>setView('dashboard')}>¡Entendido, ya pagué!</button>
         </div>
@@ -1036,17 +1024,16 @@ function ChatPage(){
     const uniqueTeams=[...new Set(teams)]
     addMsg('pele',`¡Grupo ${g}! 🎯 ${uniqueTeams.map(t=>f(t)).join(' ')} — empecemos con el primer partido.`)
     setChatPhase('stats')
-    // Show stats for first match
     setTimeout(()=>{
       const ms=matches?.filter(m=>m.phase==='group'&&m.group_name===g)||[]
-      if(ms[0]) showMatchStats(ms[0])
+      if(ms[0]) showMatchStats(ms[0], 0)
     },400)
   }
 
-  function showMatchStats(match){
+  function showMatchStats(match, forceIdx){
     if(!match) return
+    if(forceIdx!==undefined) setCurrentMatchIdx(forceIdx)
     addMsg('pele','__STATS__','stats')
-    setCurrentMatchIdx(groupMatches.findIndex(m=>m.id===match.id)||0)
     addMsg('pele',`¿Cuánto crees que queda este partido? 🤔\n(Dime el marcador o escribe "no sé" para que yo te sugiera)`)
     setChatPhase('score_input')
   }
@@ -1105,10 +1092,9 @@ function ChatPage(){
     setExtraForm({yellow:'',red:'',pen_count:'',g1h:'',g2h:'',mvp:''})
     const nextIdx=currentMatchIdx+1
     if(nextIdx<groupMatches.length){
-      setCurrentMatchIdx(nextIdx)
       const next=groupMatches[nextIdx]
       addMsg('pele',`¡Vamos al siguiente! ⚽`)
-      showMatchStats(next)
+      showMatchStats(next, nextIdx)
     } else {
       // Group done
       addMsg('pele','__GROUP_DONE__','group_done')
@@ -1188,7 +1174,18 @@ function ChatPage(){
           )
           if(msg.type==='stats'&&currentMatch) return(
             <div key={msg.id} style={{width:'100%'}}>
-              <MatchStatsCard match={currentMatch} predictions={predictions}/>
+              <MatchStatsCard match={currentMatch} predictions={predictions}
+                scoreForm={scoreForm} setScoreForm={setScoreForm}
+                onSave={()=>{
+                  const h=parseInt(scoreForm.home), a=parseInt(scoreForm.away)
+                  if(isNaN(h)||isNaN(a)) return
+                  setScoreForm(p=>({...p}))
+                  addMsg('pele',`${es(currentMatch.team1)} ${h} – ${a} ${es(currentMatch.team2)}. Confirma la tarjeta 👇`)
+                  addMsg('pele','__CONFIRM__','confirm')
+                  setChatPhase('confirm')
+                }}
+                onSuggest={suggestScore}
+                saving={saving}/>
             </div>
           )
           if(msg.type==='confirm'&&currentMatch) return(
@@ -1257,12 +1254,13 @@ function ChatPage(){
   )
 }
 
-function MatchStatsCard({match,predictions}){
+function MatchStatsCard({match,predictions,scoreForm,setScoreForm,onSave,onSuggest,saving}){
   if(!match) return null
   const pred=predictions[match.id]
   const t1=match.team1, t2=match.team2
   const s1=TEAM_STATS[t1]||{rank:'?',notes:'Datos en actualización'}
   const s2=TEAM_STATS[t2]||{rank:'?',notes:'Datos en actualización'}
+  const locked=isLocked(match)
   return(
     <div className="stats-card" style={{marginBottom:'.25rem'}}>
       <div className="sc-head">
@@ -1277,20 +1275,40 @@ function MatchStatsCard({match,predictions}){
           <div className="sct-vs">VS</div>
           <div className="sct"><span className="sct-flag">{f(t2)}</span><div className="sct-name">{es(t2)}</div><div className="sct-rank">FIFA #{s2.rank}</div></div>
         </div>
-        <div style={{fontSize:'10px',color:'var(--ink3)',textAlign:'center',marginBottom:'.6rem'}}>🏟️ {match.venue} · {formatDateShort(match.match_date)}</div>
         <div style={{display:'flex',flexDirection:'column',gap:'2px',marginBottom:'.6rem'}}>
           {[
             ['📊 '+es(t1),s1.notes],
             ['📊 '+es(t2),s2.notes],
-            ['🔍 Ventaja',t1?`${es(t1)} #{${s1.rank||'?'}} vs ${es(t2)} #${s2.rank||'?'}`:'—'],
           ].map(([k,v],i)=>(
             <div key={i} className="sr"><span className="sr-k">{k}</span><span className="sr-v" style={{textAlign:'right',maxWidth:'55%'}}>{v}</span></div>
           ))}
         </div>
-        {pred&&(
-          <div className="chip chip-g" style={{fontSize:'10px'}}>
-            ✓ Tu pronóstico actual: {pred.score_home} – {pred.score_away}
+        {locked?(<div className="chip" style={{fontSize:'10px',background:'var(--red)',color:'#fff'}}>🔒 Cerrado</div>)
+        :scoreForm&&setScoreForm&&onSave?(
+          <div style={{marginTop:'.5rem'}}>
+            {pred&&<div className="chip chip-g" style={{fontSize:'10px',marginBottom:'.5rem'}}>✓ Pronóstico guardado: {pred.score_home} – {pred.score_away}</div>}
+            <div style={{display:'flex',alignItems:'center',gap:'8px',justifyContent:'center',marginBottom:'.5rem'}}>
+              <span style={{fontSize:'12px',fontWeight:600}}>{f(t1)}</span>
+              <input type="number" min="0" max="20" value={scoreForm?.home||''} onChange={e=>setScoreForm(p=>({...p,home:e.target.value}))}
+                style={{width:'44px',textAlign:'center',fontSize:'1.3rem',fontWeight:700,fontFamily:'Bebas Neue',
+                  border:'2px solid var(--gold)',borderRadius:'6px',background:'var(--cream)',color:'var(--ink)',padding:'4px'}}/>
+              <span style={{fontFamily:'Bebas Neue',fontSize:'1rem',color:'var(--ink3)'}}>—</span>
+              <input type="number" min="0" max="20" value={scoreForm?.away||''} onChange={e=>setScoreForm(p=>({...p,away:e.target.value}))}
+                style={{width:'44px',textAlign:'center',fontSize:'1.3rem',fontWeight:700,fontFamily:'Bebas Neue',
+                  border:'2px solid var(--gold)',borderRadius:'6px',background:'var(--cream)',color:'var(--ink)',padding:'4px'}}/>
+              <span style={{fontSize:'12px',fontWeight:600}}>{f(t2)}</span>
+            </div>
+            <div style={{display:'flex',gap:'6px'}}>
+              {onSuggest&&<button className="btn btn-outline btn-sm" style={{flex:1}} onClick={onSuggest}>💡 Sugiéreme</button>}
+              <button className="btn btn-gold" style={{flex:2}} onClick={onSave} disabled={saving||scoreForm?.home===''||scoreForm?.away===''}>
+                {saving?'Guardando...':'💾 Guardar marcador'}
+              </button>
+            </div>
           </div>
+        ):(
+          pred
+            ?<div className="chip chip-g" style={{fontSize:'10px'}}>✓ Tu pronóstico: {pred.score_home} – {pred.score_away}</div>
+            :null
         )}
       </div>
     </div>
