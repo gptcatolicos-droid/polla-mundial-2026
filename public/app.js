@@ -196,9 +196,12 @@ function Nav(){
   const {user,activeAvatar,view,setView,logout}=useApp()
   return(
     <nav className="nav">
-      <div style={{cursor:'pointer'}} onClick={()=>setView(user?'dashboard':'landing')}>
-        <div className="nav-logo">🏆 POLLA <span>2026</span></div>
-        <div className="nav-sub">FIFA World Cup · USA · CAN · MEX</div>
+      <div style={{cursor:'pointer',display:'flex',alignItems:'center',gap:'8px'}} onClick={()=>setView(user?'dashboard':'landing')}>
+        <img src="/logo.png" alt="Polla 2026" style={{height:'42px',width:'42px',objectFit:'contain'}}/>
+        <div>
+          <div className="nav-logo" style={{lineHeight:1}}>POLLA <span>2026</span></div>
+          <div className="nav-sub">FIFA World Cup · USA · CAN · MEX</div>
+        </div>
       </div>
       <div className="nav-actions">
         <button className="btn btn-outline btn-sm" onClick={()=>setView('ranking')}>🏅 Ranking</button>
@@ -252,16 +255,7 @@ function LandingPage(){
       <div className="hero">
         <div className="hero-bg" style={{backgroundImage:`url('/bg.jpg')`}}/>
         <div className="hero-content">
-          <div className="banner-box">
-            <div className="banner-inner">
-              <div className="banner-title">
-                <span className="banner-w">POLLA </span>
-                <span className="banner-y">2026</span>
-              </div>
-              <div className="banner-flags">🇺🇸 🇨🇦 🇲🇽</div>
-              <div className="banner-sub">FIFA World Cup · 11 Jun – 19 Jul 2026</div>
-            </div>
-          </div>
+          <img src="/logo.png" alt="Polla 2026" style={{width:'220px',height:'220px',objectFit:'contain',filter:'drop-shadow(0 8px 32px rgba(0,0,0,.7))',marginBottom:'0.5rem'}}/>
           <div className="hero-date">⚽ Partido inaugural · 11 Jun · México vs Sudáfrica</div>
           <Countdown/>
           <div className="hero-ctas">
@@ -277,48 +271,45 @@ function LandingPage(){
 // ─── AUTH PAGE ────────────────────────────────────────────────────────────────
 function AuthPage(){
   const {setUser,setAvatars,setView}=useApp()
-  const [adminMode,setAdminMode]=React.useState(false)
-  const [form,setForm]=React.useState({email:'',password:''})
+  const [tab,setTab]=React.useState('login') // 'login' | 'register' | 'admin'
+  const [form,setForm]=React.useState({name:'',email:'',password:''})
   const [loading,setLoading]=React.useState(false)
   const [err,setErr]=React.useState('')
 
   const upd=k=>e=>setForm(p=>({...p,[k]:e.target.value}))
 
-  async function handleGoogle(resp){
-    if(!resp.credential) return
-    setLoading(true); setErr('')
+  async function handleLogin(e){
+    e.preventDefault(); setLoading(true); setErr('')
     try{
-      const data=await api('/api/auth/google','POST',{idToken:resp.credential})
+      const data=await api('/api/auth/login','POST',{email:form.email,password:form.password})
       localStorage.setItem('polla_token',data.token)
       setUser(data.user); setAvatars(data.avatars||[])
-      if(!data.user.termsAccepted) setView('terms')
+      if(data.user.isAdmin) setView('admin')
+      else if(!data.user.termsAccepted) setView('terms')
       else if(!data.avatars||!data.avatars.length) setView('avatars')
       else setView('dashboard')
     }catch(e){setErr(e.message)}
     setLoading(false)
   }
 
-  async function handleAdminLogin(e){
+  async function handleRegister(e){
     e.preventDefault(); setLoading(true); setErr('')
     try{
-      const data=await api('/api/auth/login','POST',form)
+      const data=await api('/api/auth/register','POST',{name:form.name,email:form.email,password:form.password})
       localStorage.setItem('polla_token',data.token)
       setUser(data.user); setAvatars([])
-      setView('admin')
+      setView('terms')
     }catch(e){setErr(e.message)}
     setLoading(false)
   }
 
-  React.useEffect(()=>{
-    fetch('/api/config').then(r=>r.json()).then(cfg=>{
-      const clientId=cfg.googleClientId||''
-      if(clientId&&window.google){
-        window.google.accounts.id.initialize({client_id:clientId,callback:handleGoogle})
-        window.google.accounts.id.renderButton(document.getElementById('g-signin'),
-          {theme:'outline',size:'large',shape:'pill',width:320,text:'continue_with'})
-      }
-    }).catch(()=>{})
-  },[])
+  const tabStyle=active=>({
+    flex:1,padding:'.5rem',fontWeight:700,fontSize:'12px',letterSpacing:'.5px',textTransform:'uppercase',
+    border:'none',cursor:'pointer',transition:'all .2s',
+    background:active?'var(--ink)':'transparent',
+    color:active?'var(--cream)':'var(--ink3)',
+    borderRadius:'6px'
+  })
 
   return(
     <div className="page">
@@ -326,30 +317,58 @@ function AuthPage(){
       <div style={{display:'flex',alignItems:'center',justifyContent:'center',flex:1,padding:'2rem 1rem'}}>
         <div className="card" style={{maxWidth:400,width:'100%'}}>
           <div style={{textAlign:'center',marginBottom:'1.5rem'}}>
-            <div style={{fontSize:'2rem',marginBottom:'.5rem'}}>🏆</div>
-            <h2 style={{fontFamily:'Bebas Neue',fontSize:'1.8rem',letterSpacing:'2px',color:'var(--ink)'}}>ÚNETE A LA POLLA</h2>
+            <img src="/logo.png" alt="Polla 2026" style={{width:'90px',height:'90px',objectFit:'contain',marginBottom:'.5rem'}}/>
             <p className="text-muted text-sm">Un correo · múltiples avatares · U$20 por avatar</p>
           </div>
 
           {err&&<Alert type="error">{err}</Alert>}
 
-          {!adminMode?(
+          {tab!=='admin'?(
             <>
-              <div id="g-signin" style={{display:'flex',justifyContent:'center',marginBottom:'1rem'}}/>
-              <button className="btn btn-google btn-full" onClick={()=>{}}>
-                <div className="g-dot"/>
-                Continuar con Google
-              </button>
-              <div className="divider" style={{textAlign:'center',color:'var(--ink3)',fontSize:'11px',margin:'1rem 0',position:'relative'}}>
-                <span style={{background:'var(--cream)',padding:'0 .75rem',position:'relative',zIndex:1}}>o</span>
-                <div style={{position:'absolute',top:'50%',left:0,right:0,height:'1px',background:'var(--border)'}}/>
+              <div style={{display:'flex',background:'var(--cream2)',borderRadius:'8px',padding:'3px',marginBottom:'1.25rem'}}>
+                <button style={tabStyle(tab==='login')} onClick={()=>{setTab('login');setErr('')}}>Ingresar</button>
+                <button style={tabStyle(tab==='register')} onClick={()=>{setTab('register');setErr('')}}>Registrarse</button>
               </div>
-              <button className="btn btn-outline btn-sm btn-full" onClick={()=>setAdminMode(true)}>Acceso Admin</button>
+
+              {tab==='login'?(
+                <form onSubmit={handleLogin}>
+                  <div className="form-group">
+                    <label>Correo electrónico</label>
+                    <input className="inp" type="email" placeholder="tu@correo.com" value={form.email} onChange={upd('email')} required/>
+                  </div>
+                  <div className="form-group">
+                    <label>Contraseña</label>
+                    <input className="inp" type="password" placeholder="••••••••" value={form.password} onChange={upd('password')} required/>
+                  </div>
+                  <button className="btn btn-ink btn-full" disabled={loading}>{loading?'Ingresando...':'Ingresar →'}</button>
+                </form>
+              ):(
+                <form onSubmit={handleRegister}>
+                  <div className="form-group">
+                    <label>Nombre completo</label>
+                    <input className="inp" type="text" placeholder="Tu nombre" value={form.name} onChange={upd('name')} required/>
+                  </div>
+                  <div className="form-group">
+                    <label>Correo electrónico</label>
+                    <input className="inp" type="email" placeholder="tu@correo.com" value={form.email} onChange={upd('email')} required/>
+                  </div>
+                  <div className="form-group">
+                    <label>Contraseña <span className="text-muted text-xs">(mínimo 6 caracteres)</span></label>
+                    <input className="inp" type="password" placeholder="••••••••" value={form.password} onChange={upd('password')} required minLength={6}/>
+                  </div>
+                  <button className="btn btn-gold btn-full" disabled={loading}>{loading?'Creando cuenta...':'Crear cuenta →'}</button>
+                </form>
+              )}
+
+              <div style={{textAlign:'center',marginTop:'1.25rem'}}>
+                <button className="btn btn-outline btn-sm" style={{fontSize:'11px',opacity:.6}} onClick={()=>{setTab('admin');setErr('')}}>⚙️ Acceso Admin</button>
+              </div>
             </>
           ):(
-            <form onSubmit={handleAdminLogin}>
+            <form onSubmit={handleLogin}>
+              <div style={{textAlign:'center',marginBottom:'1rem',fontWeight:700,fontSize:'13px',letterSpacing:'.5px'}}>ADMINISTRADOR</div>
               <div className="form-group">
-                <label>Correo Admin</label>
+                <label>Correo</label>
                 <input className="inp" type="email" value={form.email} onChange={upd('email')} required/>
               </div>
               <div className="form-group">
@@ -357,7 +376,7 @@ function AuthPage(){
                 <input className="inp" type="password" value={form.password} onChange={upd('password')} required/>
               </div>
               <button className="btn btn-ink btn-full" disabled={loading}>{loading?'Entrando...':'Entrar como Admin'}</button>
-              <button type="button" className="btn btn-outline btn-sm btn-full mt1" onClick={()=>setAdminMode(false)}>← Volver</button>
+              <button type="button" className="btn btn-outline btn-sm btn-full mt1" onClick={()=>{setTab('login');setErr('')}}>← Volver</button>
             </form>
           )}
 
@@ -400,7 +419,7 @@ function TermsPage(){
           {err&&<Alert type="error">{err}</Alert>}
           <div style={{fontSize:'12px',color:'var(--ink3)',lineHeight:'1.8'}}>
             <strong style={{color:'var(--ink)',display:'block',fontSize:'11px',textTransform:'uppercase',letterSpacing:'.5px',margin:'8px 0 3px'}}>1. Registro y Avatares</strong>
-            Un usuario puede registrarse con un único correo Google y crear múltiples avatares (nicknames de competencia). Cada avatar tiene un costo de <strong>U$20</strong>, pagaderos por PayPal o Nequi. La activación de cada avatar es manual por parte del administrador.
+            Un usuario puede registrarse con su correo y contraseña, y crear múltiples avatares (nicknames de competencia). Cada avatar tiene un costo de <strong>U$20</strong>, pagaderos por PayPal o Nequi. La activación de cada avatar es manual por parte del administrador.
             <strong style={{color:'var(--ink)',display:'block',fontSize:'11px',textTransform:'uppercase',letterSpacing:'.5px',margin:'8px 0 3px'}}>2. Plazo de Pago</strong>
             Todos los avatares deben tener su pago confirmado antes del inicio del torneo. Avatares sin pago quedan bloqueados permanentemente.
             <strong style={{color:'var(--ink)',display:'block',fontSize:'11px',textTransform:'uppercase',letterSpacing:'.5px',margin:'8px 0 3px'}}>3. Pronósticos y Edición</strong>

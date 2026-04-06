@@ -5,14 +5,14 @@ const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const path = require('path')
 const crypto = require('crypto')
-const { OAuth2Client } = require('google-auth-library')
+// google-auth-library removed
 const Anthropic = require('@anthropic-ai/sdk')
 const { calcPoints, calcExtraPoints } = require('./scoring')
 
 const app = express()
 const PORT = process.env.PORT || 3000
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex')
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
+// googleClient removed
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 app.use(express.json({ limit: '10mb' }))
@@ -292,36 +292,33 @@ function isMatchLocked(match, lockHours=2, phaseLocked=false){
 function getWinner(h,a){ return +h>+a?'home':+h<+a?'away':'draw' }
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
-app.post('/api/auth/google', async(req,res)=>{
-  const {idToken}=req.body
-  if(!idToken) return res.status(400).json({error:'idToken requerido'})
+app.post('/api/auth/register', async(req,res)=>{
+  const {name,email,password}=req.body
+  if(!name||!email||!password) return res.status(400).json({error:'Nombre, correo y contraseña son requeridos'})
+  if(password.length<6) return res.status(400).json({error:'La contraseña debe tener al menos 6 caracteres'})
   try{
-    const ticket=await googleClient.verifyIdToken({idToken,audience:process.env.GOOGLE_CLIENT_ID})
-    const {sub:googleId,name,email,picture}=ticket.getPayload()
-    let {rows:[user]}=await pool.query('SELECT * FROM users WHERE google_id=$1',[googleId])
-    if(!user){
-      const id='u-'+crypto.randomBytes(12).toString('hex')
-      ;({rows:[user]}=await pool.query(
-        'INSERT INTO users(id,google_id,name,email,picture) VALUES($1,$2,$3,$4,$5) RETURNING *',
-        [id,googleId,name,email,picture||null]
-      ))
-    }
-    const {rows:avatars}=await pool.query('SELECT * FROM avatars WHERE user_id=$1 ORDER BY created_at',[user.id])
-    const token=jwt.sign({id:user.id,email:user.email,isAdmin:user.is_admin},JWT_SECRET,{expiresIn:'30d'})
-    res.json({token,user:{id:user.id,name:user.name,email:user.email,picture:user.picture,
-      phone:user.phone,whatsappConsent:user.whatsapp_consent,
-      termsAccepted:user.terms_accepted,isAdmin:user.is_admin},avatars})
-  }catch(e){ console.error('google auth:',e.message); res.status(401).json({error:'Token de Google inválido'}) }
+    const {rows:[ex]}=await pool.query('SELECT id FROM users WHERE LOWER(email)=$1',[(email).toLowerCase()])
+    if(ex) return res.status(400).json({error:'Ya existe una cuenta con ese correo'})
+    const id='u-'+crypto.randomBytes(12).toString('hex')
+    const hash=await bcrypt.hash(password,10)
+    const {rows:[user]}=await pool.query(
+      'INSERT INTO users(id,name,email,password_hash) VALUES($1,$2,$3,$4) RETURNING *',
+      [id,name.trim(),email.toLowerCase(),hash]
+    )
+    const token=jwt.sign({id:user.id,email:user.email,isAdmin:false},JWT_SECRET,{expiresIn:'30d'})
+    res.json({token,user:{id:user.id,name:user.name,email:user.email,isAdmin:false,termsAccepted:false},avatars:[]})
+  }catch(e){ console.error('register:',e.message); res.status(500).json({error:'Error del servidor'}) }
 })
 
 app.post('/api/auth/login', async(req,res)=>{
   const {email,password}=req.body
   try{
-    const {rows:[u]}=await pool.query('SELECT * FROM users WHERE LOWER(email)=$1 AND is_admin=TRUE',[(email||'').toLowerCase()])
+    const {rows:[u]}=await pool.query('SELECT * FROM users WHERE LOWER(email)=$1',[(email||'').toLowerCase()])
     if(!u||!await bcrypt.compare(password||'',u.password_hash||''))
-      return res.status(401).json({error:'Credenciales incorrectas'})
-    const token=jwt.sign({id:u.id,email:u.email,isAdmin:true},JWT_SECRET,{expiresIn:'30d'})
-    res.json({token,user:{id:u.id,name:u.name,email:u.email,isAdmin:true,termsAccepted:true},avatars:[]})
+      return res.status(401).json({error:'Correo o contraseña incorrectos'})
+    const {rows:avatars}=await pool.query('SELECT * FROM avatars WHERE user_id=$1 ORDER BY created_at',[u.id])
+    const token=jwt.sign({id:u.id,email:u.email,isAdmin:u.is_admin},JWT_SECRET,{expiresIn:'30d'})
+    res.json({token,user:{id:u.id,name:u.name,email:u.email,isAdmin:u.is_admin,termsAccepted:u.terms_accepted},avatars})
   }catch(e){ res.status(500).json({error:'Error del servidor'}) }
 })
 
