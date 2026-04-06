@@ -431,7 +431,7 @@ app.post('/api/predictions', auth, async(req,res)=>{
     const {rows:[av]}=await pool.query('SELECT * FROM avatars WHERE id=$1',[avatarId])
     if(!av) return res.status(404).json({error:'Avatar no encontrado'})
     if(av.user_id!==req.user.id) return res.status(403).json({error:'Sin permisos'})
-    if(!av.is_paid) return res.status(403).json({error:'Avatar no activo. Realiza el pago de U$20.'})
+    // is_paid check removed: users can save predictions even before payment (won't appear in ranking)
     const {rows:[{value:open}]}=await pool.query("SELECT value FROM settings WHERE key='predictions_open'")
     if(open!=='true') return res.status(403).json({error:'Los pronósticos están cerrados'})
     const {rows:[match]}=await pool.query(`
@@ -455,7 +455,7 @@ app.post('/api/extra-predictions', auth, async(req,res)=>{
   try{
     const {rows:[av]}=await pool.query('SELECT * FROM avatars WHERE id=$1',[avatarId])
     if(!av||av.user_id!==req.user.id) return res.status(403).json({error:'Sin permisos'})
-    if(!av.is_paid) return res.status(403).json({error:'Avatar no activo'})
+    // is_paid check removed: allow extra predictions without payment
     const {rows:[match]}=await pool.query(`
       SELECT m.*,pl.is_locked,pl.auto_lock_hours
       FROM matches m LEFT JOIN phase_locks pl ON m.phase=pl.phase WHERE m.id=$1`,[matchId])
@@ -571,6 +571,18 @@ app.get('/api/admin/users', auth, admin, async(req,res)=>{
       WHERE u.is_admin=FALSE GROUP BY u.id ORDER BY u.created_at DESC`)
     res.json(rows)
   }catch(e){ res.status(500).json({error:'Error'}) }
+})
+
+app.delete('/api/admin/users/:id', auth, admin, async(req,res)=>{
+  try{
+    const uid=req.params.id
+    // Delete all related records in order (foreign keys)
+    await pool.query('DELETE FROM extra_predictions WHERE avatar_id IN (SELECT id FROM avatars WHERE user_id=$1)',[uid])
+    await pool.query('DELETE FROM predictions WHERE avatar_id IN (SELECT id FROM avatars WHERE user_id=$1)',[uid])
+    await pool.query('DELETE FROM avatars WHERE user_id=$1',[uid])
+    await pool.query('DELETE FROM users WHERE id=$1',[uid])
+    res.json({success:true})
+  }catch(e){ console.error('delete user:',e.message); res.status(500).json({error:'Error al eliminar usuario'}) }
 })
 
 app.put('/api/admin/avatars/:id', auth, admin, async(req,res)=>{

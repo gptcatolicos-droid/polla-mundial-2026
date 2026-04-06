@@ -853,7 +853,7 @@ function DashboardPage(){
           </div>
         )}
 
-        {activeAvatar&&!activeAvatar.is_paid&&(
+        {activeAvatar&&!activeAvatar.is_paid&&false&&(
           <div className="alert alert-warn mb2">
             ⚠️ <strong>{activeAvatar.nickname}</strong> está pendiente de pago. El admin lo activará al confirmar.
           </div>
@@ -1706,6 +1706,14 @@ function AdminUsers(){
     }catch(e){alert(e.message)}
   }
 
+  async function deleteUser(uid,name){
+    if(!confirm(`¿Eliminar a "${name}" y todos sus datos? Esta acción no se puede deshacer.`)) return
+    try{
+      await api(`/api/admin/users/${uid}`,'DELETE')
+      setUsers(us=>us.filter(u=>u.id!==uid))
+    }catch(e){alert('Error al eliminar: '+e.message)}
+  }
+
   if(loading) return <Spinner/>
   const filtered=users.filter(u=>!search||u.name?.toLowerCase().includes(search.toLowerCase())||u.email?.toLowerCase().includes(search.toLowerCase()))
 
@@ -1723,7 +1731,7 @@ function AdminUsers(){
           </div>
           <div className="ua-info">
             <div className="ua-name">{u.name}</div>
-            <div className="ua-email">{u.email} {u.phone&&`· ${u.phone}`}</div>
+            <div className="ua-email">{u.email}{u.phone&&<>{' · '}<a href={`https://wa.me/${u.phone.replace(/[^0-9]/g,'')}`} target="_blank" rel="noopener noreferrer" style={{color:'#25D366',fontWeight:600,textDecoration:'none'}} title="Abrir WhatsApp">📱 {u.phone}</a></>}</div>
             <div className="ua-avatars">
               {(u.avatars||[]).map(av=>(
                 <div key={av.id} style={{background:'var(--cream2)',border:'1px solid var(--border)',borderRadius:6,padding:'3px 8px',fontSize:10}}>
@@ -1739,7 +1747,10 @@ function AdminUsers(){
               ))}
             </div>
           </div>
-          <div style={{fontSize:10,color:'var(--ink3)'}}>{new Date(u.created_at).toLocaleDateString('es-CO')}</div>
+          <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'4px'}}>
+            <div style={{fontSize:10,color:'var(--ink3)'}}>{new Date(u.created_at).toLocaleDateString('es-CO')}</div>
+            <button className="btn btn-sm" style={{background:'#fee2e2',color:'#dc2626',border:'1px solid #fca5a5',padding:'2px 8px',fontSize:9,fontWeight:700}} onClick={()=>deleteUser(u.id,u.name)}>🗑 Eliminar</button>
+          </div>
         </div>
       ))}
     </div>
@@ -1765,6 +1776,14 @@ function AdminLocks(){
       await api(`/api/admin/phase-locks/${phase}`,'PUT',{isLocked:locks.find(l=>l.phase===phase)?.is_locked,autoLockHours:+h})
       setLocks(ls=>ls.map(l=>l.phase===phase?{...l,auto_lock_hours:+h}:l))
     }catch(e){alert(e.message)}
+  }
+
+  async function deleteUser(uid,name){
+    if(!confirm(`¿Eliminar a "${name}" y todos sus datos? Esta acción no se puede deshacer.`)) return
+    try{
+      await api(`/api/admin/users/${uid}`,'DELETE')
+      setUsers(us=>us.filter(u=>u.id!==uid))
+    }catch(e){alert('Error al eliminar: '+e.message)}
   }
 
   if(loading) return <Spinner/>
