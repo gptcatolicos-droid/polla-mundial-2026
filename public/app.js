@@ -656,7 +656,7 @@ function CreateAvatarModal({onClose,onCreated}){
 }
 
 // ─── SPECIAL PREDICTIONS (Onboarding) ────────────────────────────────────────
-const ALL_TEAMS=Object.keys(FLAGS).filter(t=>!t.startsWith('Play-Off')&&FLAGS[t]!=='❓')
+const TEAMS_SPECIAL=Object.keys(FLAGS).filter(t=>!t.startsWith('Play-Off')&&FLAGS[t]!=='❓')
 const UNDERDOGS=['Morocco','Japan','Norway','Turkey','Korea Republic','Iraq','DR Congo','Uzbekistan','Curaçao','Cape Verde','Bosnia and Herzegovina','Czechia','South Africa','Haiti','Jordan','Panama','Ghana','Senegal','Ecuador','Algeria']
 
 function SpecialPredictionsPage(){
@@ -725,7 +725,7 @@ function SpecialPredictionsPage(){
           )}
           <select className="inp mt1" value={preds.champion} onChange={e=>setPreds(p=>({...p,champion:e.target.value}))}>
             <option value="">— Otra selección —</option>
-            {ALL_TEAMS.map(t=><option key={t} value={t}>{f(t)} {es(t)}</option>)}
+            {TEAMS_SPECIAL.map(t=><option key={t} value={t}>{f(t)} {es(t)}</option>)}
           </select>
         </div>
 
@@ -751,7 +751,7 @@ function SpecialPredictionsPage(){
           </div>
           <select className="inp mt1" value={preds.surprise} onChange={e=>setPreds(p=>({...p,surprise:e.target.value}))}>
             <option value="">— Selecciona equipo sorpresa —</option>
-            {ALL_TEAMS.map(t=><option key={t} value={t}>{f(t)} {es(t)}</option>)}
+            {TEAMS_SPECIAL.map(t=><option key={t} value={t}>{f(t)} {es(t)}</option>)}
           </select>
         </div>
 
