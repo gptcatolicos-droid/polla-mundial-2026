@@ -1053,19 +1053,29 @@ function ChatPage(){
     setChatPhase('score_input')
   }
 
-  function suggestScore(){
+  async function suggestScore(){
     if(!currentMatch) return
     const t1=currentMatch.team1, t2=currentMatch.team2
-    const s1=TEAM_STATS[t1], s2=TEAM_STATS[t2]
-    let home=1,away=0
-    if(s1&&s2){
-      if(s1.rank<s2.rank) home=2
-      else if(s2.rank<s1.rank){home=0;away=1}
+    const s1=TEAM_STATS[t1]||{rank:50,notes:''}
+    const s2=TEAM_STATS[t2]||{rank:50,notes:''}
+    setLoadingMsg(true)
+    try{
+      const data=await api('/api/pele/suggest','POST',{
+        team1:t1, team2:t2,
+        rank1:s1.rank, rank2:s2.rank,
+        notes1:s1.notes||'Sin datos adicionales',
+        notes2:s2.notes||'Sin datos adicionales',
+        venue:currentMatch.venue||'',
+        matchDate:currentMatch.match_date||'',
+        group:currentMatch.group_name||''
+      })
+      const h=data.home??1, a=data.away??0
+      setScoreForm({home:String(h),away:String(a),pen:''})
+      addMsg('pele',`💡 Mi análisis: **${es(t1)} ${h} – ${a} ${es(t2)}**\n${data.reason||''}`)
+    }catch(e){
+      addMsg('pele','No pude conectarme al análisis 😅 Pon el marcador que creas.')
     }
-    setScoreForm({home:String(home),away:String(away),pen:''})
-    addMsg('pele',`💡 Basado en rankings y forma reciente, te sugiero: **${es(t1)} ${home} – ${away} ${es(t2)}**\n¿Aceptas mi sugerencia o prefieres poner otro marcador?`)
-    addMsg('pele','__CONFIRM__','confirm')
-    setChatPhase('confirm')
+    setLoadingMsg(false)
   }
 
   async function confirmScore(){

@@ -547,15 +547,43 @@ app.post('/api/pele', auth, async(req,res)=>{
   try{
     const msg=await anthropic.messages.create({
       model:'claude-sonnet-4-20250514',
-      max_tokens:300,
-      system:`Eres Pelé IA 🏆, el asistente del juego de pronósticos "La Polla de la Familia" del Mundial 2026.
-Personalidad: divertido, apasionado, breve (máx 3-4 líneas), en español, experto en estadísticas.
-Avatar: ${avatarName||'el usuario'}. Contexto del partido: ${JSON.stringify(matchContext||{})}.`,
+      max_tokens:350,
+      system:`Eres Pelé IA 🏆, analista y asistente del torneo "La Polla de la Familia" - Mundial 2026.
+PERSONALIDAD: apasionado por el fútbol, con datos reales, humor latino, BREVE (máx 3 líneas), siempre en español.
+JUGADOR: ${avatarName||'el usuario'}.
+${matchContext?`PARTIDO ACTUAL: ${JSON.stringify(matchContext)}`:''}
+REGLAS: nunca inventes datos falsos, sé honesto si no tienes info específica, usa emojis con moderación.`,
       messages:[{role:'user',content:userMessage}]
     })
     res.json({response:msg.content[0].text})
   }catch(e){
-    res.json({response:'¡Tuve un problema técnico! ⚽ Pero sigamos — ¿cuánto crees que queda? 😄'})
+    res.json({response:'¡Tuve un problema técnico! ⚽ ¿Cuánto crees que queda? 😄'})
+  }
+})
+
+// Sugerencia de marcador con análisis real de Claude
+app.post('/api/pele/suggest', auth, async(req,res)=>{
+  const {team1,team2,rank1,rank2,notes1,notes2,venue,matchDate,group}=req.body
+  try{
+    const msg=await anthropic.messages.create({
+      model:'claude-sonnet-4-20250514',
+      max_tokens:400,
+      system:`Eres un analista experto de fútbol del Mundial 2026. Debes sugerir un marcador realista para un partido.
+Responde SIEMPRE en este formato JSON exacto (sin markdown, sin texto extra):
+{"home":NUMERO,"away":NUMERO,"reason":"texto corto máx 2 líneas en español explicando por qué"}`,
+      messages:[{role:'user',content:`Partido del Grupo ${group}: ${team1} (FIFA #${rank1}, ${notes1}) vs ${team2} (FIFA #${rank2}, ${notes2}). Sede: ${venue}. Fecha: ${matchDate}. Sugiere un marcador realista considerando: ranking FIFA, historial reciente, estilo de juego, sede y contexto del grupo.`}]
+    })
+    let result={home:1,away:0,reason:'Sin datos suficientes para análisis'}
+    try{
+      const text=msg.content[0].text.trim()
+      result=JSON.parse(text)
+      result.home=Math.max(0,Math.min(9,parseInt(result.home)||0))
+      result.away=Math.max(0,Math.min(9,parseInt(result.away)||0))
+    }catch(pe){ console.error('parse suggest:',pe.message) }
+    res.json(result)
+  }catch(e){
+    console.error('suggest:',e.message)
+    res.json({home:1,away:0,reason:'No pude conectarme al análisis. Usa tu criterio 😄'})
   }
 })
 
