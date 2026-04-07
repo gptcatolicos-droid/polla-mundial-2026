@@ -1,7 +1,7 @@
 {
-  "name": "polla-mundial-2026",
+  "name": "lapollaia",
   "version": "2.0.0",
-  "description": "La Polla de la Familia \u2014 FIFA World Cup 2026",
+  "description": "La Polla IA \u2014 SaaS de Torneos Mundialistas",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -12,9 +12,10 @@
     "bcryptjs": "^2.4.3",
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.2",
-    "multer": "^1.4.5-lts.1",
     "pg": "^8.11.3",
-    "twilio": "^5.3.0"
+    "twilio": "^5.3.0",
+    "mercadopago": "^2.0.6",
+    "nodemailer": "^6.9.0"
   },
   "engines": {
     "node": ">=18.0.0"
